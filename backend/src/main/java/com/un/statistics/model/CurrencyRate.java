@@ -3,7 +3,7 @@ package com.un.statistics.model;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "currency_rate")
@@ -13,8 +13,9 @@ public class CurrencyRate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "coin_id", nullable = false)
-    private Long coinId;
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "coin_id", nullable = false)
+    private Coin coin;
 
     @Column(name = "rate_to_usd", nullable = false, precision = 18, scale = 8)
     private BigDecimal rateToUsd;
@@ -23,23 +24,23 @@ public class CurrencyRate {
     private BigDecimal rateToCo;
 
     @Column(name = "rate_date", nullable = false)
-    private OffsetDateTime rateDate;
+    private LocalDate rateDate;
 
     @Column(name = "origin", nullable = false)
     private String origin;
 
     /* getters y setters */
 
+    public Coin getCoin() {
+        return coin;
+    }
+
+    public void setCoin(Coin coin) {
+        this.coin = coin;
+    }
+
     public Long getId() {
         return id;
-    }
-
-    public Long getCoinId() {
-        return coinId;
-    }
-
-    public void setCoinId(Long coinId) {
-        this.coinId = coinId;
     }
 
     public BigDecimal getRateToUsd() {
@@ -58,11 +59,11 @@ public class CurrencyRate {
         this.rateToCo = rateToCo;
     }
 
-    public OffsetDateTime getRateDate() {
+    public LocalDate getRateDate() {
         return rateDate;
     }
 
-    public void setRateDate(OffsetDateTime rateDate) {
+    public void setRateDate(LocalDate rateDate) {
         this.rateDate = rateDate;
     }
 

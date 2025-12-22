@@ -19,8 +19,8 @@ public class CurrencyRateService {
 
     public Map<Long, List<CurrencyRate>> getHistoryByCoinIds(List<Long> coinIds) {
         return currencyRateRepository
-                .findByCoinIdInOrderByRateDateAsc(coinIds)
-                .stream()
-                .collect(Collectors.groupingBy(CurrencyRate::getCoinId));
+            .findByCoin_IdInOrderByRateDateAsc(coinIds)
+            .stream()
+            .collect(Collectors.groupingBy(rate -> rate.getCoin().getId()));
     }
 }
