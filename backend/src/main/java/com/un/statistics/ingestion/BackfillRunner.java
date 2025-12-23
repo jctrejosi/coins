@@ -24,7 +24,8 @@ public class BackfillRunner implements CommandLineRunner {
         LocalDate startDate = endDate.minusYears(1); // últimos 1 año
         */
 
-        LocalDate endDate = LocalDate.now();
+        LocalDate now = LocalDate.now();
+        LocalDate endDate = now.minusDays(365*4);
         LocalDate startDate = endDate.minusDays(365); // últimos 3 días incluyendo hoy
 
         System.out.println("Iniciando backfill de " + startDate + " a " + endDate);
