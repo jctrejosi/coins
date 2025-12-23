@@ -4,8 +4,10 @@ import com.un.statistics.config.ExchangeRateProperties;
 import com.un.statistics.ingestion.response.ExchangeRateResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Component
 public class ExchangeRateClient {
@@ -14,58 +16,55 @@ public class ExchangeRateClient {
 
     public ExchangeRateClient(WebClient.Builder builder, ExchangeRateProperties properties) {
         this.webClient = builder
-                .baseUrl(properties.getBaseUrl()) // configurable, ej: https://api.exchangerate.host
+                .baseUrl(properties.getBaseUrl()) // por ejemplo https://api.exchangerate.host
                 .build();
     }
 
     /**
-     * Obtiene tasas para una fecha específica (historical).
-     * @param date fecha a consultar
-     * @param base moneda base
-     * @param symbols lista de códigos de monedas
+     * historical: un día
      */
-    public ExchangeRateResponse getRates(LocalDate date, String base, java.util.List<String> symbols) {
+    public ExchangeRateResponse getRates(LocalDate date, String base, List<String> symbols) {
         return webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("historical")
-                        .queryParam("date", date.toString())
-                        .queryParam("base", base)
-                        .queryParam("symbols", String.join(",", symbols))
-                        .build()
-                )
+                .uri(uriBuilder -> buildHistoricalUri(uriBuilder, date, base, symbols))
+                .retrieve()
+                .bodyToMono(ExchangeRateResponse.class)
+                .block();
+    }
+
+    private java.net.URI buildHistoricalUri(UriBuilder uriBuilder, LocalDate date, String base, List<String> symbols) {
+        UriBuilder b = uriBuilder.path("historical")
+                .queryParam("date", date.toString())
+                .queryParam("base", base);
+        if (symbols != null && !symbols.isEmpty()) b.queryParam("symbols", String.join(",", symbols));
+        return b.build();
+    }
+
+    /**
+     * timeframe: rango de fechas. pasar los symbols reduce el payload.
+     */
+    public ExchangeRateResponse getTimeframeRates(LocalDate startDate, LocalDate endDate, String base, List<String> symbols) {
+        return webClient.get()
+                .uri(uriBuilder -> {
+                    UriBuilder b = uriBuilder.path("timeframe")
+                            .queryParam("start_date", startDate.toString())
+                            .queryParam("end_date", endDate.toString())
+                            .queryParam("base", base)
+                            .queryParam("access_key", "3c45fda8c10d9d1c287d00f2887e7bb5");
+                    if (symbols != null && !symbols.isEmpty()) b.queryParam("symbols", String.join(",", symbols));
+                    return b.build();
+                })
                 .retrieve()
                 .bodyToMono(ExchangeRateResponse.class)
                 .block();
     }
 
     /**
-     * Obtiene tasas para un rango de fechas (timeframe).
-     * Devuelve un mapa con fecha -> {USDXXX -> valor}.
-     * @param startDate fecha de inicio
-     * @param endDate fecha final
-     * @param base moneda base
-     */
-    public ExchangeRateResponse getTimeframeRates(LocalDate startDate, LocalDate endDate, String base) {
-        return webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("timeframe")
-                        .queryParam("start_date", startDate.toString())
-                        .queryParam("end_date", endDate.toString())
-                        .queryParam("base", base)
-                        .build()
-                )
-                .retrieve()
-                .bodyToMono(ExchangeRateResponse.class)
-                .block();
-    }
-
-    /**
-     * Convierte un monto de una moneda a otra (opcional, útil para otras operaciones).
+     * convert (opcional)
      */
     public ExchangeRateResponse convert(String from, String to, double amount) {
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .pathSegment("convert")
+                        .path("convert")
                         .queryParam("from", from)
                         .queryParam("to", to)
                         .queryParam("amount", amount)

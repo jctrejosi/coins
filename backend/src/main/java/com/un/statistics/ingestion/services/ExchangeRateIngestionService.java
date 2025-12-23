@@ -6,14 +6,16 @@ import com.un.statistics.model.Coin;
 import com.un.statistics.model.CurrencyRate;
 import com.un.statistics.repository.CoinRepository;
 import com.un.statistics.repository.CurrencyRateRepository;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ExchangeRateIngestionService {
@@ -33,68 +35,79 @@ public class ExchangeRateIngestionService {
     }
 
     /**
-     * Carga histórica de tasas de cambio usando la API de timeframe.
-     * Se asume base USD y frecuencia diaria.
+     * Backfill usando timeframe en una sola llamada (por rango).
+     * Calcula:
+     *  - rate_to_usd = 1 / (USD->XXX)
+     *  - rate_to_co  = rate_to_usd * (USD->COP)
+     *
+     * Solo procesa las monedas registradas en la BD.
      */
     @Transactional
     public void backfill(LocalDate startDate, LocalDate endDate) {
 
-        // Obtener todos los coins de la BD
         List<Coin> coins = coinRepository.findAll();
-        if (coins.isEmpty()) {
-            throw new IllegalStateException("No hay monedas registradas en la tabla coin");
-        }
+        if (coins.isEmpty()) throw new IllegalStateException("No hay monedas registradas en la tabla coin");
 
-        // Map para buscar coins por código
+        // map code -> Coin (asegúrate que coin.getCode() devuelve "COP", "EUR", etc)
         Map<String, Coin> coinMap = coins.stream()
-                .collect(java.util.stream.Collectors.toMap(Coin::getCode, c -> c));
+                .collect(Collectors.toMap(c -> c.getCode().toUpperCase(), c -> c));
 
-        System.out.println("Símbolos registrados en la BD: " + coinMap.keySet());
+        // pasar la lista de symbols para reducir payload
+        List<String> symbols = new ArrayList<>(coinMap.keySet());
+        if (!symbols.contains("COP")) symbols.add("COP"); // necesario para calcular rate_to_co
 
-        // Llamar a la API con rango de fechas
-        ExchangeRateResponse response = exchangeRateClient.getTimeframeRates(startDate, endDate, "USD");
+        ExchangeRateResponse response = exchangeRateClient.getTimeframeRates(startDate, endDate, "USD", symbols);
 
-        if (response == null || response.getRates() == null || response.getRates().isEmpty()) {
-            System.out.println("No hay datos de la API para el rango solicitado");
+        if (response == null || response.getQuotes() == null || response.getQuotes().isEmpty()) {
             return;
         }
 
-        // Iterar por cada fecha
-        for (Map.Entry<String, Map<String, Double>> entry : response.getRates().entrySet()) {
+        for (Map.Entry<String, Map<String, Double>> entry : response.getQuotes().entrySet()) {
             LocalDate rateDate = LocalDate.parse(entry.getKey());
             Map<String, Double> dailyRates = entry.getValue();
 
-            System.out.println("Procesando fecha: " + rateDate);
+            Double usdToCop = dailyRates.get("USDCOP");
 
-            // Iterar por cada par USDXXX -> valor
-            dailyRates.forEach((apiCode, rateValue) -> {
+            List<CurrencyRate> toSave = new ArrayList<>();
 
-                // Extraer los últimos 3 dígitos para compararlo con los coins
-                String code = apiCode.substring(3); // USDXXX -> XXX
+            for (Map.Entry<String, Double> kv : dailyRates.entrySet()) {
+                String apiCode = kv.getKey();
+                if (apiCode == null || !apiCode.startsWith("USD")) continue;
 
+                String code = apiCode.substring(3).toUpperCase();
                 Coin coin = coinMap.get(code);
-                if (coin == null) {
-                    System.out.println("Moneda no encontrada en BD: " + code);
-                    return;
+                if (coin == null) continue; // ignorar monedas que no estén en BD
+
+                Double usdToX = kv.getValue();
+                if (usdToX == null || usdToX == 0.0) continue;
+
+                boolean exists = currencyRateRepository.existsByCoinAndRateDateAndOrigin(coin, rateDate, "exchangerate.host");
+                if (exists) continue; // evitar duplicados
+
+                BigDecimal rateToUsd = BigDecimal.ONE.divide(BigDecimal.valueOf(usdToX), 12, RoundingMode.HALF_UP);
+
+                BigDecimal rateToCo;
+                if (usdToCop != null && usdToCop > 0) {
+                    rateToCo = rateToUsd.multiply(BigDecimal.valueOf(usdToCop)).setScale(6, RoundingMode.HALF_UP);
+                } else if ("COP".equals(code)) {
+                    rateToCo = BigDecimal.ONE;
+                } else {
+                    rateToCo = BigDecimal.ZERO; // si no se puede calcular
                 }
 
-                boolean exists = currencyRateRepository.existsByCoinAndRateDateAndOrigin(coin, rateDate, "USD");
-                if (exists) {
-                    System.out.println("Registro ya existe: " + code + " - " + rateDate);
-                    return;
-                }
+                CurrencyRate cr = new CurrencyRate();
+                cr.setCoin(coin);
+                cr.setRateDate(rateDate);
+                cr.setRateToUsd(rateToUsd.setScale(8, RoundingMode.HALF_UP));
+                cr.setRateToCo(rateToCo);
+                cr.setOrigin("exchangerate.host");
 
-                CurrencyRate rate = new CurrencyRate();
-                rate.setCoin(coin);
-                rate.setRateDate(rateDate);
-                rate.setRateToUsd(BigDecimal.valueOf(rateValue));
-                rate.setOrigin("exchangerate.host");
+                toSave.add(cr);
+            }
 
-                currencyRateRepository.save(rate);
-                System.out.println("Guardado: " + code + " -> " + rateValue + " en " + rateDate);
-            });
+            if (!toSave.isEmpty()) {
+                currencyRateRepository.saveAll(toSave);
+            }
         }
-
-        System.out.println("Backfill completado para el rango: " + startDate + " a " + endDate);
     }
 }
