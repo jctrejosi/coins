@@ -1,6 +1,7 @@
 package com.un.statistics.ingestion.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Map;
 
@@ -9,8 +10,11 @@ public class ExchangeRateResponse {
 
     private boolean success;
     private String base;
-    private String date;
-    private Map<String, Double> rates;
+    private String startDate;
+    private String endDate;
+
+    @JsonProperty("quotes")
+    private Map<String, Map<String, Double>> rates;
 
     public boolean isSuccess() {
         return success;
@@ -28,19 +32,37 @@ public class ExchangeRateResponse {
         this.base = base;
     }
 
-    public String getDate() {
-        return date;
+    public String getStartDate() {
+        return startDate;
     }
 
-    public void setDate(String date) {
-        this.date = date;
+    public void setStartDate(String startDate) {
+        this.startDate = startDate;
     }
 
-    public Map<String, Double> getRates() {
+    public String getEndDate() {
+        return endDate;
+    }
+
+    public void setEndDate(String endDate) {
+        this.endDate = endDate;
+    }
+
+    public Map<String, Map<String, Double>> getRates() {
         return rates;
     }
 
-    public void setRates(Map<String, Double> rates) {
+    public void setRates(Map<String, Map<String, Double>> rates) {
         this.rates = rates;
+    }
+
+    /**
+     * Devuelve todos los quotes planos para una fecha específica
+     */
+    public Map<String, Double> getQuotes(String date) {
+        if (rates == null || !rates.containsKey(date)) {
+            return Map.of();
+        }
+        return rates.get(date);
     }
 }
