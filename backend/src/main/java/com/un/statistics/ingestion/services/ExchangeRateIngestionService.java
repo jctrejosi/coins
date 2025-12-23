@@ -1,5 +1,7 @@
-package com.un.statistics.ingestion;
+package com.un.statistics.ingestion.services;
 
+import com.un.statistics.ingestion.client.ExchangeRateClient;
+import com.un.statistics.ingestion.response.ExchangeRateResponse;
 import com.un.statistics.model.Coin;
 import com.un.statistics.model.CurrencyRate;
 import com.un.statistics.repository.CoinRepository;

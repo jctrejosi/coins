@@ -1,6 +1,8 @@
-package com.un.statistics.ingestion;
+package com.un.statistics.ingestion.client;
 
 import com.un.statistics.config.ExchangeRateProperties;
+import com.un.statistics.ingestion.response.ExchangeRateResponse;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 

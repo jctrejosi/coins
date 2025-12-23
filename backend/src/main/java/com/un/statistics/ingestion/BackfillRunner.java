@@ -4,9 +4,9 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.util.List;
+import com.un.statistics.ingestion.services.ExchangeRateIngestionService;
 
+import java.time.LocalDate;
 @Component
 @Profile("backfill") // solo corre con perfil 'backfill'
 public class BackfillRunner implements CommandLineRunner {

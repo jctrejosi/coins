@@ -1,4 +1,4 @@
-package com.un.statistics.ingestion;
+package com.un.statistics.ingestion.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
